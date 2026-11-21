@@ -22,6 +22,7 @@ with sqlite3.connect(DB_PATH) as db:
             author TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS likes (post_id INTEGER NOT NULL, user TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes (post_id);
     """)
 
 
@@ -109,12 +110,12 @@ def like():
 @app.get("/feed")
 def feed():
     db = connection()
-    # One read transaction makes all 21 queries a consistent snapshot.
-    with db:
-        db.execute("BEGIN")
-        posts = []
-        for row in db.execute("SELECT * FROM posts ORDER BY id DESC LIMIT 20").fetchall():
-            post = dict(row)
-            post["likes"] = db.execute("SELECT COUNT(*) FROM likes WHERE post_id = ?", (row["id"],)).fetchone()[0]
-            posts.append(post)
+    query = """
+        SELECT id, author, content, created_at,
+               (SELECT COUNT(*) FROM likes WHERE post_id = posts.id) AS likes
+        FROM posts
+        ORDER BY id DESC
+        LIMIT 20
+    """
+    posts = [dict(row) for row in db.execute(query).fetchall()]
     return jsonify(posts=posts)
